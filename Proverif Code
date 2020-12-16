@@ -1,0 +1,244 @@
+(*-SAKE+ channel-*)
+free c: channel.
+(*-SAKE+ types-*)
+type key.
+type nonce.
+type host.
+(*-SAKE+ keys-*)
+free SKa,SKb,K,Kj0,Kj1,Kj2:bitstring [private].
+free Bj0,Bj1,Bj2,Rb0,Rb1,B:bitstring.
+free A: host.
+(*-SAKE+ constants-*)
+const f0,f1,Dhel0,Dhel1,DhelN,Epsi0,Epsi1,X: bitstring.
+table TA(host,key,bitstring,bitstring,bitstring,bitstring,nonce,nonce).
+table TB(bitstring,key,bitstring,bitstring).
+(*-SAKE+ functions-*)
+fun nonce_to_bitstring(nonce): bitstring [data,typeConverter].
+fun bitstring_to_key(bitstring): key [data,typeConverter].
+fun host_to_bitstring(host): bitstring [data,typeConverter].
+fun bitstring_to_nonce(bitstring): nonce [data,typeConverter].
+fun mac(bitstring, key): bitstring.
+reduc forall m: bitstring, k: key; get_message(mac(m,k)) = m.
+fun PRF(bitstring,key): bitstring.
+fun con(bitstring,bitstring): bitstring.
+(*-SAKE+ events-*)
+event beginAparam(host, nonce).
+event endAAuth(host, nonce).
+event beginBparam(bitstring, nonce).
+event endBAuth(bitstring, nonce).
+event beginsyncBkey(bitstring, host, nonce, key).
+event endsyncBkey(bitstring, host, nonce, key).
+(*-SAKE+ queries-*)
+query attacker(SKa).
+query attacker(SKb).
+query attacker(K).
+query attacker(Kj0).
+query attacker(Kj1).
+query attacker(Kj2).
+query x: host, y: nonce; inj-event(endAAuth(x, y)) ==> inj-event(beginAparam(x, y)).
+query x: bitstring, y: nonce; inj-event(endBAuth(x, y)) ==> inj-event(beginBparam(x, y)).
+query x: bitstring, y: host, z: nonce, t: key; inj-event(endsyncBkey(x,y,z,t)) ==> inj-event(beginsyncBkey(x,y,z,t)).
+(* Role of the initiator *)
+let processInitiator =
+new Ra: nonce;
+new aDhel: bitstring;
+new aEpsi: bitstring;
+new akj: bitstring;
+get TA(aA,aK,aKj0,aKj1,aBj0,aBj1,aRb0,aRb1) in
+let A = aA in
+let m0 = (A,Ra) in
+event beginAparam(A, Ra);
+(* ---->A||r_A *)
+out(c,m0);
+(* m_B<---- *)
+in(c,(aB:bitstring,aRb:nonce,aTb:bitstring));
+let aBj2 = PRF(X, bitstring_to_key(aBj1)) in
+if aB = aBj0 then let B = aBj0 in
+if aB = aBj1 then let B = aBj1 in
+if aB = aBj2 then let B = aBj2 in
+if aB <> aBj0 && aB <> aBj1 && aB <> aBj2 then let B = aBj1 in
+if aRb0 <> aRb && aRb1 <> aRb then
+(
+  let Tbin = con(B,con(host_to_bitstring(A),con(nonce_to_bitstring(aRb),nonce_to_bitstring(Ra)))) in
+  let Tb = mac(Tbin, bitstring_to_key(aKj1)) in
+  if Tb = aTb then
+  (
+	let aDhel = Dhel0 in
+	let akj = aKj1 in
+	let SKa = PRF(con(nonce_to_bitstring(Ra),nonce_to_bitstring(aRb)), aK) in
+	let aK = PRF(X, aK) in
+	let aBj1 = PRF(X, bitstring_to_key(con(aBj1,aKj1))) in
+	let aKj0 = aKj1 in
+	let aKj1 = PRF(X, bitstring_to_key(aKj1)) in
+	let aBj0 = aBj1 in
+	let aEpsi = Epsi0 in
+	let aRb0 = aRb1 in let aRb1 = aRb in
+	insert TA(A,bitstring_to_key(aK),aKj0,aKj1,aBj0,aBj1,aRb0,aRb1);
+        let Tain = con(aEpsi,con(host_to_bitstring(A),con(B,(nonce_to_bitstring(Ra),nonce_to_bitstring(aRb))))) in
+	let Ta = mac(Tain, bitstring_to_key(akj)) in
+	let ma = (B,aEpsi,Ta) in
+	out(c,ma)
+    (* ---->m_A *)
+    )
+    else
+	let Tbin = con(B,con(host_to_bitstring(A),con(nonce_to_bitstring(aRb),nonce_to_bitstring(Ra)))) in
+	let Tb = mac(Tbin, bitstring_to_key(aKj0)) in
+	if Tb = aTb then
+	(
+	  let aDhel = Dhel1 in
+	  let akj = aKj0 in
+	  let aEpsi = Epsi1 in
+	  let aRb0 = aRb1 in let aRb1 = aRb in
+	  insert TA(A,aK,aKj0,aKj1,aBj0,aBj1,aRb0,aRb1);
+          let Tain = con(aEpsi,con(host_to_bitstring(A),con(B,(nonce_to_bitstring(Ra),nonce_to_bitstring(aRb))))) in
+	  let Ta = mac(Tain, bitstring_to_key(akj)) in
+	  let ma = (B,aEpsi,Ta) in
+	  out(c,ma)
+      (* ---->m_A *)
+	)
+    else
+	let Tbin = con(B,con(host_to_bitstring(A),con(nonce_to_bitstring(aRb),nonce_to_bitstring(Ra)))) in
+	let Tb = mac(Tbin, bitstring_to_key(PRF(X, bitstring_to_key(aKj1)))) in
+	if Tb = aTb then
+	(
+	  let aDhel = DhelN in
+	  let akj = PRF(X, bitstring_to_key(aKj1)) in
+	  let aK = PRF(X, aK) in
+	  let aBj1 = PRF(X, bitstring_to_key(con(aBj1,aKj1))) in
+	  let aKj0 = aKj1 in
+	  let aKj1 = PRF(X, bitstring_to_key(aKj1)) in
+	  let aBj0 = aBj1 in
+	  let SKa = PRF(con(nonce_to_bitstring(Ra),nonce_to_bitstring(aRb)), bitstring_to_key(aK)) in
+	  let aK = PRF(X, bitstring_to_key(aK)) in
+	  let aBj1 = PRF(X, bitstring_to_key(con(aBj1,aKj1))) in
+	  let aKj0 = aKj1 in
+	  let aKj1 = PRF(X, bitstring_to_key(aKj1)) in
+	  let aBj0 = aBj1 in
+	  let aEpsi = Epsi0 in
+	  let aRb0 = aRb1 in let aRb1 = aRb in
+	  insert TA(A,bitstring_to_key(aK),aKj0,aKj1,aBj0,aBj1,aRb0,aRb1);
+          let Tain = con(aEpsi,con(host_to_bitstring(A),con(B,(nonce_to_bitstring(Ra),nonce_to_bitstring(aRb))))) in
+	  let Ta = mac(Tain, bitstring_to_key(akj)) in
+	  let ma = (B,aEpsi,Ta) in
+	  out(c,ma)
+      (* ---->m_A *)
+	)
+  else
+  yield	
+)
+else
+(* B||T^P_B<---- *)
+in(c,(aB:bitstring,aTpb:bitstring));
+let B = aB in
+if aEpsi = Epsi0 then
+( 
+  let akj = aKj1 in
+  let Tpbin = con(nonce_to_bitstring(aRb),nonce_to_bitstring(Ra)) in
+  let Tpb = mac(Tpbin, bitstring_to_key(akj)) in
+  if Tpb = aTpb then
+	(
+	  let Tpain = con(nonce_to_bitstring(Ra),nonce_to_bitstring(aRb)) in
+	  let Tpa = mac(Tpain, bitstring_to_key(akj)) in		
+	  let m3 = (B,Tpa) in
+	  event beginsyncBkey(B, A, aRb, bitstring_to_key(akj));
+	  out(c,m3)
+      (* ---->B||T^p_A *)
+	)
+  else
+  yield	
+)
+else
+if aEpsi = Epsi1 then	
+(
+  let akj = PRF(X, bitstring_to_key(aKj1)) in
+  let Tpbin = con(nonce_to_bitstring(aRb),nonce_to_bitstring(Ra)) in
+  let Tpb = mac(Tpbin, bitstring_to_key(akj)) in
+  if Tpb = aTpb then
+	(
+	  let SKa = PRF(con(nonce_to_bitstring(Ra),nonce_to_bitstring(aRb)), aK) in
+	  let aK = PRF(X, aK) in
+	  let aBj1 = PRF(X, bitstring_to_key(con(aBj1,aKj1))) in
+	  let aKj0 = aKj1 in
+	  let aKj1 = PRF(X, bitstring_to_key(aKj1)) in
+	  let aBj0 = aBj1 in
+	  let Tpain = con(nonce_to_bitstring(Ra),nonce_to_bitstring(aRb)) in
+	  let Tpa = mac(Tpain, bitstring_to_key(akj)) in		
+	  let m3 = (B,Tpa) in
+	  event beginsyncBkey(B, A, aRb, bitstring_to_key(akj));
+	  event endBAuth(B, aRb);
+	  out(c,m3)
+      (* ---->B||T^p_A *)
+	)
+  else
+  yield
+)
+else
+0.
+(* Role of the responder *)
+let processResponder =
+(* A||r_A<---- *)
+in(c,(bA:host, bRa:nonce));
+get TB(bB,bK,bKj,bf) in
+new Rb: nonce;
+let bTbin = con(bB,con(host_to_bitstring(bA),con(nonce_to_bitstring(Rb),nonce_to_bitstring(bRa)))) in
+let bTb = mac(bTbin, bitstring_to_key(bKj)) in
+new Ralfa: nonce;
+let mb = (if bf= f1 then (nonce_to_bitstring(Ralfa),Rb,bTb) else (bB,Rb,bTb)) in
+let bf= f1 in
+event beginBparam(bB, Rb);
+(* ---->m_B *)
+out(c,(mb));
+(* m_A<---- *)
+in(c,(bBp: bitstring,bEpsi: bitstring,bTa: bitstring));
+let Tapin = con(bEpsi,con(host_to_bitstring(bA),con(bB,con(nonce_to_bitstring(bRa),nonce_to_bitstring(Rb))))) in
+let Tap = mac(Tapin, bitstring_to_key(bKj)) in
+if Tap = bTa then
+if bEpsi = Epsi1 then
+(
+  let bK = PRF(X, bK) in
+  let bB = PRF(X, bitstring_to_key(con(bB,bKj))) in
+  let bKj = PRF(X, bitstring_to_key(bKj)) in
+  let SKb = PRF(con(nonce_to_bitstring(bRa),nonce_to_bitstring(Rb)), bitstring_to_key(bK)) in
+  let bK = PRF(X, bitstring_to_key(bK)) in
+  let bB = PRF(X, bitstring_to_key(con(bB,bKj))) in
+  let bKj = PRF(X, bitstring_to_key(bKj)) in
+  let bf= f0 in
+  insert TB(bB,bitstring_to_key(bK),bKj,bf);
+  let Tpbpin = con(nonce_to_bitstring(Rb),nonce_to_bitstring(bRa)) in
+  let Tpbp = mac(Tpbpin, bitstring_to_key(bKj)) in	
+  let m2 = (bB,Tpbp) in
+  (* ---->B||T^p_B *)
+  out(c,m2)
+)
+else
+let SKb = PRF(con(nonce_to_bitstring(bRa),nonce_to_bitstring(Rb)), bK) in
+let bK = PRF(X, bK) in
+let bB = PRF(X, bitstring_to_key(con(bB,bKj))) in
+let bKj = PRF(X, bitstring_to_key(bKj)) in
+let bf= f0 in
+insert TB(bB,bitstring_to_key(bK),bKj,bf);
+let Tpbpin = con(nonce_to_bitstring(Rb),nonce_to_bitstring(bRa)) in
+let Tpbp = mac(Tpbpin, bitstring_to_key(bKj)) in
+let m2 = (bB,Tpbp) in
+(* ---->B||T^p_B *)
+out(c,m2);
+(* B||T^p_A<---- *)
+in(c,(bBpp:bitstring,bTpa:bitstring));
+let bTpapin = con(nonce_to_bitstring(bRa),nonce_to_bitstring(Rb)) in
+let bTpap = mac(bTpapin, bitstring_to_key(bKj)) in
+if bTpap = bTpa then
+(
+event endsyncBkey(bBpp, bA, Rb, bitstring_to_key(bKj));
+event endAAuth(bA, bRa)
+)
+else
+0.
+process
+  insert TA(A,bitstring_to_key(K),Kj0,Kj1,Bj0,Bj1,bitstring_to_nonce(Rb0),bitstring_to_nonce(Rb1));
+  new f: bitstring;
+  let f = f0 in
+  insert TB(B,bitstring_to_key(K),Kj0,f);
+  (
+  (!processInitiator) | 
+  (!processResponder)
+  )	
